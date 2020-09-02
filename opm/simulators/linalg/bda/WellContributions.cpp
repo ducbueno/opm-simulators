@@ -104,6 +104,10 @@ WellContributions::~WellContributions()
 #if HAVE_OPENCL
 
 void WellContributions::init(cl::Context *context){
+    if (!num_blocks)
+    {
+        return;
+    }
     d_Cnnzs_ocl = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * num_blocks * dim * dim_wells);
     d_Dnnzs_ocl = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * num_std_wells * dim_wells * dim_wells);
     d_Bnnzs_ocl = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * num_blocks * dim * dim_wells);
@@ -113,6 +117,10 @@ void WellContributions::init(cl::Context *context){
 }
 
 void WellContributions::copyDataToGPU(cl::CommandQueue *queue){
+    if (!num_blocks)
+    {
+        return;
+    }
     cl::Event event;
 
     queue->enqueueWriteBuffer(d_Cnnzs_ocl, CL_TRUE, 0, sizeof(double) * num_blocks * dim * dim_wells, h_Cnnzs_ocl);
