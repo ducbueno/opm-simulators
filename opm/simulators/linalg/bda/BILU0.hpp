@@ -28,6 +28,7 @@
 #include <opm/simulators/linalg/bda/opencl.hpp>
 #include <opm/simulators/linalg/bda/openclKernels.hpp>
 #include <opm/simulators/linalg/bda/ChowPatelIlu.hpp>
+#include <opm/simulators/linalg/bda/IncompleteSAI.hpp>
 
 // if CHOW_PATEL is 0, exact ILU decomposition is performed on CPU
 // if CHOW_PATEL is 1, iterative ILU decomposition (FGPILU) is done, as described in:
@@ -40,6 +41,7 @@
 #define CHOW_PATEL     0
 #define CHOW_PATEL_GPU 1
 
+#define ISAI 1
 
 namespace bda
 {
@@ -99,6 +101,7 @@ namespace bda
         int lmem_per_work_group = 0;
 
         ChowPatelIlu chowPatelIlu;
+        IncompleteSAI isai;
 
         void chow_patel_decomposition();
 

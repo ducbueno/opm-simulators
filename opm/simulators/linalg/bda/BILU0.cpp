@@ -50,6 +50,11 @@ BILU0<block_size>::~BILU0()
     template <unsigned int block_size>
     bool BILU0<block_size>::init(BlockedMatrix<block_size> *mat)
     {
+#if ISAI
+        isai.setParams(mat->Nb, block_size, mat->nnzbs, verbosity);
+        isai.setMapping(mat->colIndices, mat->rowPointers);
+#endif
+
         const unsigned int bs = block_size;
 
         this->N = mat->Nb * block_size;
@@ -606,12 +611,15 @@ BILU0<block_size>::~BILU0()
         cl::Event event;
         Timer t_apply;
 
+#if ISAI
+        isai.apply(s.LUcols, s.LUrows, s.diagIndex, s.LUvals, x, y);
+#else
         for(int color = 0; color < numColors; ++color){
 #if CHOW_PATEL
             event = (*ILU_apply1)(cl::EnqueueArgs(*queue, cl::NDRange(total_work_items), cl::NDRange(work_group_size)), s.Lvals, s.Lcols, s.Lrows, s.diagIndex, x, y, s.rowsPerColor, color, block_size, cl::Local(lmem_per_work_group));
 #else
             event = (*ILU_apply1)(cl::EnqueueArgs(*queue, cl::NDRange(total_work_items), cl::NDRange(work_group_size)), s.LUvals, s.LUcols, s.LUrows, s.diagIndex, x, y, s.rowsPerColor, color, block_size, cl::Local(lmem_per_work_group));
-#endif
+#endif // CHOW_PATEL
             // event.wait();
         }
 
@@ -620,9 +628,10 @@ BILU0<block_size>::~BILU0()
             event = (*ILU_apply2)(cl::EnqueueArgs(*queue, cl::NDRange(total_work_items), cl::NDRange(work_group_size)), s.Uvals, s.Ucols, s.Urows, s.diagIndex, s.invDiagVals, y, s.rowsPerColor, color, block_size, cl::Local(lmem_per_work_group));
 #else
             event = (*ILU_apply2)(cl::EnqueueArgs(*queue, cl::NDRange(total_work_items), cl::NDRange(work_group_size)), s.LUvals, s.LUcols, s.LUrows, s.diagIndex, s.invDiagVals, y, s.rowsPerColor, color, block_size, cl::Local(lmem_per_work_group));
-#endif
+#endif // CHOW_PATEL
             // event.wait();
         }
+#endif // ISAI
 
         if (verbosity >= 4) {
             event.wait();
@@ -636,17 +645,31 @@ BILU0<block_size>::~BILU0()
 template <unsigned int block_size>
 void BILU0<block_size>::setOpenCLContext(cl::Context *context_) {
     this->context = context_;
+
+#if ISAI
+    isai.setOpenCLContext(context_);
+#endif
 }
+
+
 template <unsigned int block_size>
 void BILU0<block_size>::setOpenCLQueue(cl::CommandQueue *queue_) {
     this->queue = queue_;
+
+#if ISAI
+    isai.setOpenCLQueue(queue_);
+#endif
 }
+
+
 template <unsigned int block_size>
 void BILU0<block_size>::setKernelParameters(const unsigned int work_group_size_, const unsigned int total_work_items_, const unsigned int lmem_per_work_group_) {
     this->work_group_size = work_group_size_;
     this->total_work_items = total_work_items_;
     this->lmem_per_work_group = lmem_per_work_group_;
 }
+
+
 template <unsigned int block_size>
 void BILU0<block_size>::setKernels(
     cl::make_kernel<cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, cl::Buffer&, const unsigned int, const unsigned int, cl::LocalSpaceArg> *ILU_apply1_,

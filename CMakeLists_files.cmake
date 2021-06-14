@@ -90,6 +90,8 @@ if(OPENCL_FOUND)
   list (APPEND MAIN_SOURCE_FILES opm/simulators/linalg/bda/BILU0.cpp)
   list (APPEND MAIN_SOURCE_FILES opm/simulators/linalg/bda/Reorder.cpp)
   list (APPEND MAIN_SOURCE_FILES opm/simulators/linalg/bda/ChowPatelIlu.cpp)
+  list (APPEND MAIN_SOURCE_FILES opm/simulators/linalg/bda/ISAIKernels.cpp)
+  list (APPEND MAIN_SOURCE_FILES opm/simulators/linalg/bda/IncompleteSAI.cpp)
   list (APPEND MAIN_SOURCE_FILES opm/simulators/linalg/bda/opencl.cpp)
   list (APPEND MAIN_SOURCE_FILES opm/simulators/linalg/bda/openclKernels.cpp)
   list (APPEND MAIN_SOURCE_FILES opm/simulators/linalg/bda/openclSolverBackend.cpp)
@@ -227,6 +229,8 @@ list (APPEND PUBLIC_HEADER_FILES
   opm/simulators/linalg/bda/cuda_header.hpp
   opm/simulators/linalg/bda/cusparseSolverBackend.hpp
   opm/simulators/linalg/bda/ChowPatelIlu.hpp
+  opm/simulators/linalg/bda/ISAIKernels.hpp
+  opm/simulators/linalg/bda/IncompleteSAI.hpp
   opm/simulators/linalg/bda/FPGAMatrix.hpp
   opm/simulators/linalg/bda/FPGABILU0.hpp
   opm/simulators/linalg/bda/FPGASolverBackend.hpp
