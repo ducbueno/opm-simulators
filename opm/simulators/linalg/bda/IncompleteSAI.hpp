@@ -18,6 +18,7 @@ namespace bda{
         cl::CommandQueue *queue;
         cl::Program program;
         std::vector<cl::Device> devices;
+        std::vector<cl::Event> events;
         cl::Buffer d_invLUvals, d_mapping, d_invL_x;
 
         std::unique_ptr<isai_L_kernel_type> isai_L_k;
