@@ -3,6 +3,22 @@
 namespace bda{
     std::string get_isai_L_string(){
         return R"(
+        __kernel void block_neg(__global double *a, __global double *b)
+        {
+            const unsigned int bs = 3;
+            const unsigned int warpsize = 32;
+            const unsigned int num_active_threads = (warpsize / bs / bs) * bs * bs;
+            const unsigned int idx_t = get_local_id(0);
+            const unsigned int lane = idx_t % warpsize;
+
+            if(lane < num_active_threads){
+                const unsigned int row = lane % bs;
+                const unsigned int col = (lane / bs) % bs;
+
+                a[bs * row + col] = -b[bs * row + col];
+            }
+        }
+
         __kernel void block_mult_sub(__global double *a, __global double *b, __global double *c)
         {
             const unsigned int bs = 3;
@@ -44,41 +60,35 @@ namespace bda{
             const unsigned int lane = idx_t % warpsize;
             const unsigned int c = (lane / bs) % bs;
             const unsigned int r = lane % bs;
-            unsigned int target_block_col = idx / warpsize;
+            unsigned int tcol = idx / warpsize;
 
-            while(target_block_col < Nb){
-                const unsigned int start_cptr = diagIndex[target_block_col];
-                const unsigned int end_cptr = colPtr[target_block_col + 1];
-                unsigned int curr_cptr = start_cptr;
+            while(tcol < Nb - 1){
+                const unsigned int frow = diagIndex[tcol];
+                const unsigned int lrow = colPtr[tcol + 1];
 
                 if(lane < num_active_threads){
-                    for(; curr_cptr < end_cptr - 1; curr_cptr++){
-                        unsigned int curr_rowi = rowIndex[curr_cptr];
-                        unsigned int aux_cptr = curr_cptr + 1 + lane / bs / bs;
+                    unsigned int trow = frow + 1 + lane / bs / bs;
 
-                        while(aux_cptr < end_cptr){
-                            unsigned int aux_rowi = rowIndex[aux_cptr];
-                            unsigned int aux_rptr = diagIndex[aux_rowi] - 1;
+                    while(trow < lrow){
+                        unsigned int trow_idx = rowIndex[trow];
 
-                            if(curr_cptr == start_cptr){
-                                invLU[mapping[aux_rowi] * bs * bs + r * bs + c] -= LU[mapping[aux_rowi] * bs * bs + r * bs + c];
-                            }
-                            else{
-                                while(aux_rptr >= colPtr[aux_rowi] && rowIndex[aux_rptr] != curr_rowi){
-                                    aux_rptr--;
-                                }
+                        block_neg(invLU + mapping[trow_idx] * bs * bs, LU + mapping[trow_idx] * bs * bs);
 
-                                if(aux_rptr >= colPtr[aux_rowi] && rowIndex[aux_rptr] == curr_rowi){
-                                    block_mult_sub(invLU + mapping[aux_rowi] * bs * bs, invLU + mapping[curr_rowi] * bs * bs, LU + rowIndex[aux_rptr] * bs * bs);
+                        for(unsigned int xptr = frow + 1; xptr < lrow; xptr++){
+                            for(unsigned int tcol_in_row = colPtr[trow_idx]; tcol_in_row < diagIndex[trow_idx]; tcol_in_row++){
+                                if(rowIndex[tcol_in_row] == rowIndex[xptr]){
+                                    if(xptr - frow < tcol_in_row - colPtr[trow_idx]){
+                                        block_mult_sub(invLU + mapping[trow_idx] * bs * bs, invLU + mapping[rowIndex[xptr]] * bs * bs, LU + rowIndex[tcol_in_row] * bs * bs);
+                                    }
                                 }
                             }
-
-                            aux_cptr += num_blocks_per_warp;
                         }
+
+                        trow += num_blocks_per_warp;
                     }
                 }
 
-                target_block_col += num_warps_in_grid;
+                tcol += num_warps_in_grid;
             }
         }
         )";
@@ -86,6 +96,43 @@ namespace bda{
 
     std::string get_isai_U_string(){
         return R"(
+        __kernel void block_copy(__global double *a, __global double *b)
+        {
+            const unsigned int bs = 3;
+            const unsigned int warpsize = 32;
+            const unsigned int num_active_threads = (warpsize / bs / bs) * bs * bs;
+            const unsigned int idx_t = get_local_id(0);
+            const unsigned int lane = idx_t % warpsize;
+
+            if(lane < num_active_threads){
+                const unsigned int row = lane % bs;
+                const unsigned int col = (lane / bs) % bs;
+
+                a[bs * row + col] = b[bs * row + col];
+            }
+        }
+
+        __kernel void block_mult(__global double *a, __global double *b, __global double *c)
+        {
+            const unsigned int bs = 3;
+            const unsigned int warpsize = 32;
+            const unsigned int num_active_threads = (warpsize / bs / bs) * bs * bs;
+            const unsigned int idx_t = get_local_id(0);
+            const unsigned int lane = idx_t % warpsize;
+
+            if(lane < num_active_threads){
+                const unsigned int row = lane % bs;
+                const unsigned int col = (lane / bs) % bs;
+                double temp = 0.0;
+
+                for (unsigned int k = 0; k < bs; k++) {
+                    temp += b[bs * row + k] * c[bs * k + col];
+                }
+
+                a[bs * row + col] = temp;
+            }
+        }
+
         __kernel void isai_U(__global const int *mapping,
                             __global const int *colPtr,
                             __global const int *rowIndex,
@@ -106,40 +153,40 @@ namespace bda{
             const unsigned int lane = idx_t % warpsize;
             const unsigned int c = (lane / bs) % bs;
             const unsigned int r = lane % bs;
-            unsigned int target_block_col = idx / warpsize;
+            unsigned int tcol = idx / warpsize;
 
-            while(target_block_col < Nb){
-                const unsigned int start_cptr = colPtr[target_block_col];
-                const unsigned int end_cptr = diagIndex[target_block_col];
-                unsigned int curr_cptr = end_cptr;
-                unsigned int curr_rowi = rowIndex[curr_cptr];
+            while(tcol < Nb){
+                const unsigned int frow = colPtr[tcol];
+                const unsigned int lrow = diagIndex[tcol];
 
                 if(lane < num_active_threads){
-                    for(; curr_cptr >= start_cptr; curr_cptr--){
-                        unsigned int aux_cptr = curr_cptr - 1 - lane / bs / bs;
+                    int trow = frow + lane / bs / bs;
 
-                        if(curr_cptr == end_cptr){
-                            invLU[mapping[curr_rowi] * bs * bs + r * bs + c] -= LU[mapping[curr_rowi] * bs * bs + r * bs + c];
+                    while(trow <= lrow){
+                        unsigned int trow_idx = rowIndex[trow];
+
+                        if(trow == lrow){
+                            block_copy(invLU + mapping[trow_idx] * bs * bs, LU + mapping[trow_idx] * bs * bs);
                         }
 
-                        while(aux_cptr >= start_cptr){
-                            unsigned int aux_rowi = rowIndex[aux_cptr];
-                            unsigned int aux_rptr = diagIndex[aux_rowi];
-
-                            while(aux_rptr < colPtr[aux_rowi + 1] && rowIndex[aux_rptr] != curr_rowi){
-                                aux_rptr++;
+                        for(unsigned int xptr = frow; xptr < frow; xptr++){
+                            for(unsigned int tcol_in_row = diagIndex[trow_idx]; tcol_in_row < colPtr[trow_idx + 1]; tcol_in_row++){
+                                if(rowIndex[tcol_in_row] == rowIndex[xptr]){
+                                    if(xptr - frow < tcol_in_row - diagIndex[trow_idx]){
+                                        block_mult_sub(invLU + mapping[trow_idx] * bs * bs, invLU + mapping[rowIndex[xptr]] * bs * bs, LU + rowIndex[tcol_in_row] * bs * bs);
+                                    }
+                                    else if(xptr - frow == tcol_in_row - diagIndex[trow_idx]){
+                                        block_mult(invLU + mapping[trow_idx] * bs * bs, invLU + mapping[rowIndex[xptr]] * bs * bs, LU + rowIndex[tcol_in_row] * bs * bs);
+                                    }
+                                }
                             }
-
-                            if(aux_rptr < colPtr[aux_rowi + 1] && rowIndex[aux_rptr] == curr_rowi){
-                                block_mult_sub(invLU + mapping[aux_rowi] * bs * bs, invLU + mapping[curr_rowi] * bs * bs, LU + rowIndex[aux_rptr] * bs * bs);
-                            }
-
-                            aux_cptr += num_blocks_per_warp;
                         }
+
+                        trow += num_blocks_per_warp;
                     }
                 }
 
-                target_block_col += num_warps_in_grid;
+                tcol += num_warps_in_grid;
             }
         }
         )";

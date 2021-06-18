@@ -158,7 +158,7 @@ namespace bda{
                 d_mapping = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(int) * nnzbs);
                 d_invL_x = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * Nb * bs);
 
-                Dune::Timer t_copy_mapping;
+                Dune::Timer t_copy_data;
                 events.resize(2);
                 err = queue->enqueueWriteBuffer(d_mapping, CL_TRUE, 0, sizeof(int) * mapping.size(), mapping.data(), nullptr, &events[0]);
                 err |= queue->enqueueFillBuffer(d_invLUvals, 0, 0, sizeof(double) * Nb * bs, nullptr, &events[1]);
@@ -166,7 +166,7 @@ namespace bda{
 
                 if(verbosity >= 4){
                     std::ostringstream out;
-                    out << "IncompleteSAI copy data to GPU time: " << t_copy_mapping.stop() << " s";
+                    out << "IncompleteSAI copy data to GPU time: " << t_copy_data.stop() << " s";
                     OpmLog::info(out.str());
                 }
 
