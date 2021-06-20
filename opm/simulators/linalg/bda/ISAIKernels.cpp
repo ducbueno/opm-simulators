@@ -134,12 +134,12 @@ namespace bda{
         }
 
         __kernel void isai_U(__global const int *mapping,
-                            __global const int *colPtr,
-                            __global const int *rowIndex,
-                            __global const int *diagIndex,
-                            __global const double *LU,
-                            __global double *invLU,
-                            const unsigned int Nb)
+                             __global const int *colPtr,
+                             __global const int *rowIndex,
+                             __global const int *diagIndex,
+                             __global const double *LU,
+                             __global double *invLU,
+                             const unsigned int Nb)
         {
             const unsigned int warpsize = 32;
             const unsigned int idx_b = get_group_id(0);
@@ -160,22 +160,25 @@ namespace bda{
                 const unsigned int lrow = diagIndex[tcol];
 
                 if(lane < num_active_threads){
-                    int trow = frow + lane / bs / bs;
+                    unsigned int trow = frow + lane / bs / bs;
 
                     while(trow <= lrow){
                         unsigned int trow_idx = rowIndex[trow];
+                        unsigned int xptr = frow;
+                        unsigned int tcol_in_row = diagIndex[trow_idx];
 
                         if(trow == lrow){
                             block_copy(invLU + mapping[trow_idx] * bs * bs, LU + mapping[trow_idx] * bs * bs);
+                            break;
                         }
 
-                        for(unsigned int xptr = frow; xptr < frow; xptr++){
-                            for(unsigned int tcol_in_row = diagIndex[trow_idx]; tcol_in_row < colPtr[trow_idx + 1]; tcol_in_row++){
+                        for(; xptr <= lrow; xptr++){
+                            for(; tcol_in_row < colPtr[trow_idx + 1]; tcol_in_row++){
                                 if(rowIndex[tcol_in_row] == rowIndex[xptr]){
                                     if(xptr - frow < tcol_in_row - diagIndex[trow_idx]){
                                         block_mult_sub(invLU + mapping[trow_idx] * bs * bs, invLU + mapping[rowIndex[xptr]] * bs * bs, LU + rowIndex[tcol_in_row] * bs * bs);
                                     }
-                                    else if(xptr - frow == tcol_in_row - diagIndex[trow_idx]){
+                                    if(xptr - frow == tcol_in_row - diagIndex[trow_idx]){
                                         block_mult(invLU + mapping[trow_idx] * bs * bs, invLU + mapping[rowIndex[xptr]] * bs * bs, LU + rowIndex[tcol_in_row] * bs * bs);
                                     }
                                 }
