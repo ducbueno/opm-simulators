@@ -278,7 +278,7 @@ namespace bda{
             const unsigned int lane = idx_t % warpsize;
             const unsigned int c = (lane / bs) % bs;
             const unsigned int r = lane % bs;
-            unsigned int target_block_row = 1 + idx / warpsize;
+            unsigned int target_block_row = idx / warpsize;
 
             while(target_block_row < Nb){
                 unsigned int first_block = diagIndex[target_block_row];

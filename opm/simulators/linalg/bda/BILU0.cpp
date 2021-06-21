@@ -613,6 +613,7 @@ BILU0<block_size>::~BILU0()
 
 #if ISAI
         isai.apply(s.LUcols, s.LUrows, s.diagIndex, s.LUvals, x, y);
+        isai_flag = true;
 #else
         for(int color = 0; color < numColors; ++color){
 #if CHOW_PATEL
@@ -633,7 +634,7 @@ BILU0<block_size>::~BILU0()
         }
 #endif // ISAI
 
-        if (verbosity >= 4) {
+        if (verbosity >= 4 && !isai_flag) {
             event.wait();
             std::ostringstream out;
             out << "BILU0 apply: " << t_apply.stop() << " s";

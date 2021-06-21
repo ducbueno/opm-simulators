@@ -40,7 +40,6 @@
 // ChowPatelIlu could also operate on a full matrix LU when L and U are merged, but it is generally better to keep them split
 #define CHOW_PATEL     0
 #define CHOW_PATEL_GPU 1
-
 #define ISAI 1
 
 namespace bda
@@ -70,6 +69,7 @@ namespace bda
         int numColors;
         int verbosity;
         std::once_flag pattern_uploaded;
+        bool isai_flag = false;
 
         ILUReorder opencl_ilu_reorder;
 

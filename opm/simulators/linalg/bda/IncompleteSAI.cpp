@@ -54,7 +54,7 @@ namespace bda{
     }
 
     void IncompleteSAI::isai_L_w(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& d_LUvals){
-        const unsigned int work_group_size = 32;
+        const unsigned int work_group_size = 256;
         const unsigned int num_work_groups = ceilDivision(Nb, work_group_size);
         const unsigned int total_work_items = num_work_groups * work_group_size;
 
@@ -71,7 +71,7 @@ namespace bda{
     }
 
     void IncompleteSAI::isai_U_w(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& d_LUvals){
-        const unsigned int work_group_size = 32;
+        const unsigned int work_group_size = 256;
         const unsigned int num_work_groups = ceilDivision(Nb, work_group_size);
         const unsigned int total_work_items = num_work_groups * work_group_size;
 
