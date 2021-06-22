@@ -70,10 +70,10 @@ namespace bda{
                 if(lane < num_active_threads){
                     unsigned int xid = 1 + lane / bs / bs;
 
-                    while(xid < nx){
-                        unsigned int xpos = mapping[rowIndex[frow + xid]];
+                    for(unsigned int sweep = 1; sweep < nx; sweep++){
+                        while(xid < nx){
+                            unsigned int xpos = mapping[rowIndex[frow + xid]];
 
-                        for(unsigned int sweep = 1; sweep < nx; sweep++){
                             if(sweep == 1){
                                 block_sub(invLU + xpos * bs * bs, LU + xpos * bs * bs);
                             }
@@ -87,9 +87,9 @@ namespace bda{
                                     }
                                 }
                             }
-                        }
 
-                        xid += num_blocks_per_warp;
+                            xid += num_blocks_per_warp;
+                        }
                     }
                 }
 
@@ -147,26 +147,28 @@ namespace bda{
                 if(lane < num_active_threads){
                     unsigned int xid = lane / bs / bs;
 
-                    while(xid < nx){
-                        unsigned int xpos = mapping[rowIndex[lrow - xid]];
+                    for(unsigned int sweep = 0; sweep < nx; sweep++){
+                        while(xid < nx){
+                            unsigned int xpos = mapping[rowIndex[lrow - xid - 1]];
 
-                        for(unsigned int sweep = 0; sweep < nx; sweep++){
-                            if(sweep == 0 && xid == nx - 1){
+                            if(sweep == 0 && xid == 0){
                                 block_add(invLU + xpos * bs * bs, LU + xpos * bs * bs);
                             }
                             else{
-                                unsigned int dxpos = mapping[rowIndex[lrow - sweep + 1]]; // dxpos -> determined (already calculated) x position
+                                unsigned int dxpos = mapping[rowIndex[lrow - sweep]]; // dxpos -> determined (already calculated) x position
                                 unsigned int ptr = colPtr[tcol - sweep + 1];
 
                                 for(; ptr < diagIndex[tcol - sweep + 1]; ptr++){
-                                    if(rowIndex[ptr] == rowIndex[lrow - xid]){
+                                    if(rowIndex[ptr] == rowIndex[lrow - xid - 1]){
                                         block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[rowIndex[ptr]] * bs * bs);
                                     }
                                 }
                             }
-                        }
 
-                        xid += num_blocks_per_warp;
+                            // add one more sweep that will multiply the X's by inverses of the diagonals!
+
+                            xid += num_blocks_per_warp;
+                        }
                     }
                 }
 
