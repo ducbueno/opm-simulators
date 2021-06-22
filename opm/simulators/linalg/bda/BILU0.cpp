@@ -612,7 +612,7 @@ BILU0<block_size>::~BILU0()
         Timer t_apply;
 
 #if ISAI
-        isai.apply(s.LUcols, s.LUrows, s.diagIndex, s.LUvals, x, y);
+        isai.apply(s.LUrows, s.LUcols, s.diagIndex, s.LUvals, x, y);
         isai_flag = true;
 #else
         for(int color = 0; color < numColors; ++color){

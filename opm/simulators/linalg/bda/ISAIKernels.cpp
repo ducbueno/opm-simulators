@@ -3,7 +3,7 @@
 namespace bda{
     std::string get_isai_L_string(){
         return R"(
-        __kernel void block_neg(__global double *a, __global double *b)
+        __kernel void block_sub(__global double *a, __global double *b)
         {
             const unsigned int bs = 3;
             const unsigned int warpsize = 32;
@@ -15,7 +15,7 @@ namespace bda{
                 const unsigned int row = lane % bs;
                 const unsigned int col = (lane / bs) % bs;
 
-                a[bs * row + col] = -b[bs * row + col];
+                a[bs * row + col] -= b[bs * row + col];
             }
         }
 
@@ -41,12 +41,12 @@ namespace bda{
         }
 
         __kernel void isai_L(__global const int *mapping,
-                            __global const int *colPtr,
-                            __global const int *rowIndex,
-                            __global const int *diagIndex,
-                            __global const double *LU,
-                            __global double *invLU,
-                            const unsigned int Nb)
+                             __global const int *colPtr,
+                             __global const int *rowIndex,
+                             __global const int *diagIndex,
+                             __global const double *LU,
+                             __global double *invLU,
+                             const unsigned int Nb)
         {
             const unsigned int warpsize = 32;
             const unsigned int idx_b = get_group_id(0);
@@ -65,26 +65,31 @@ namespace bda{
             while(tcol < Nb - 1){
                 const unsigned int frow = diagIndex[tcol];
                 const unsigned int lrow = colPtr[tcol + 1];
+                const unsigned int nx = lrow - frow;
 
                 if(lane < num_active_threads){
-                    unsigned int trow = frow + 1 + lane / bs / bs;
+                    unsigned int xid = 1 + lane / bs / bs;
 
-                    while(trow < lrow){
-                        unsigned int trow_idx = rowIndex[trow];
+                    while(xid < nx){
+                        unsigned int xpos = mapping[rowIndex[frow + xid]];
 
-                        block_neg(invLU + mapping[trow_idx] * bs * bs, LU + mapping[trow_idx] * bs * bs);
+                        for(unsigned int sweep = 1; sweep < nx; sweep++){
+                            if(sweep == 1){
+                                block_sub(invLU + xpos * bs * bs, LU + xpos * bs * bs);
+                            }
+                            else{
+                                unsigned int dxpos = mapping[rowIndex[frow + sweep - 1]]; // dxpos -> determined (already calculated) x position
+                                unsigned int ptr = diagIndex[tcol + sweep];
 
-                        for(unsigned int xptr = frow + 1; xptr < lrow; xptr++){
-                            for(unsigned int tcol_in_row = colPtr[trow_idx]; tcol_in_row < diagIndex[trow_idx]; tcol_in_row++){
-                                if(rowIndex[tcol_in_row] == rowIndex[xptr]){
-                                    if(xptr - frow < tcol_in_row - colPtr[trow_idx]){
-                                        block_mult_sub(invLU + mapping[trow_idx] * bs * bs, invLU + mapping[rowIndex[xptr]] * bs * bs, LU + rowIndex[tcol_in_row] * bs * bs);
+                                for(; ptr < colPtr[tcol + sweep + 1]; ptr++){
+                                    if(rowIndex[ptr] == rowIndex[frow + xid]){
+                                        block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[rowIndex[ptr]] * bs * bs);
                                     }
                                 }
                             }
                         }
 
-                        trow += num_blocks_per_warp;
+                        xid += num_blocks_per_warp;
                     }
                 }
 
@@ -96,7 +101,7 @@ namespace bda{
 
     std::string get_isai_U_string(){
         return R"(
-        __kernel void block_copy(__global double *a, __global double *b)
+        __kernel void block_add(__global double *a, __global double *b)
         {
             const unsigned int bs = 3;
             const unsigned int warpsize = 32;
@@ -108,28 +113,7 @@ namespace bda{
                 const unsigned int row = lane % bs;
                 const unsigned int col = (lane / bs) % bs;
 
-                a[bs * row + col] = b[bs * row + col];
-            }
-        }
-
-        __kernel void block_mult(__global double *a, __global double *b, __global double *c)
-        {
-            const unsigned int bs = 3;
-            const unsigned int warpsize = 32;
-            const unsigned int num_active_threads = (warpsize / bs / bs) * bs * bs;
-            const unsigned int idx_t = get_local_id(0);
-            const unsigned int lane = idx_t % warpsize;
-
-            if(lane < num_active_threads){
-                const unsigned int row = lane % bs;
-                const unsigned int col = (lane / bs) % bs;
-                double temp = 0.0;
-
-                for (unsigned int k = 0; k < bs; k++) {
-                    temp += b[bs * row + k] * c[bs * k + col];
-                }
-
-                a[bs * row + col] = temp;
+                a[bs * row + col] += b[bs * row + col];
             }
         }
 
@@ -157,35 +141,32 @@ namespace bda{
 
             while(tcol < Nb){
                 const unsigned int frow = colPtr[tcol];
-                const unsigned int lrow = diagIndex[tcol];
+                const unsigned int lrow = diagIndex[tcol] + 1;
+                const unsigned int nx = lrow - frow;
 
                 if(lane < num_active_threads){
-                    unsigned int trow = frow + lane / bs / bs;
+                    unsigned int xid = lane / bs / bs;
 
-                    while(trow <= lrow){
-                        unsigned int trow_idx = rowIndex[trow];
-                        unsigned int xptr = frow;
-                        unsigned int tcol_in_row = diagIndex[trow_idx];
+                    while(xid < nx){
+                        unsigned int xpos = mapping[rowIndex[lrow - xid]];
 
-                        if(trow == lrow){
-                            block_copy(invLU + mapping[trow_idx] * bs * bs, LU + mapping[trow_idx] * bs * bs);
-                            break;
-                        }
+                        for(unsigned int sweep = 0; sweep < nx; sweep++){
+                            if(sweep == 0 && xid == nx - 1){
+                                block_add(invLU + xpos * bs * bs, LU + xpos * bs * bs);
+                            }
+                            else{
+                                unsigned int dxpos = mapping[rowIndex[lrow - sweep + 1]]; // dxpos -> determined (already calculated) x position
+                                unsigned int ptr = colPtr[tcol - sweep + 1];
 
-                        for(; xptr <= lrow; xptr++){
-                            for(; tcol_in_row < colPtr[trow_idx + 1]; tcol_in_row++){
-                                if(rowIndex[tcol_in_row] == rowIndex[xptr]){
-                                    if(xptr - frow < tcol_in_row - diagIndex[trow_idx]){
-                                        block_mult_sub(invLU + mapping[trow_idx] * bs * bs, invLU + mapping[rowIndex[xptr]] * bs * bs, LU + rowIndex[tcol_in_row] * bs * bs);
-                                    }
-                                    if(xptr - frow == tcol_in_row - diagIndex[trow_idx]){
-                                        block_mult(invLU + mapping[trow_idx] * bs * bs, invLU + mapping[rowIndex[xptr]] * bs * bs, LU + rowIndex[tcol_in_row] * bs * bs);
+                                for(; ptr < diagIndex[tcol - sweep + 1]; ptr++){
+                                    if(rowIndex[ptr] == rowIndex[lrow - xid]){
+                                        block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[rowIndex[ptr]] * bs * bs);
                                     }
                                 }
                             }
                         }
 
-                        trow += num_blocks_per_warp;
+                        xid += num_blocks_per_warp;
                     }
                 }
 

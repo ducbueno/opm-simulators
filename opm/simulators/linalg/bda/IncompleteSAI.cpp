@@ -58,9 +58,13 @@ namespace bda{
         const unsigned int num_work_groups = ceilDivision(Nb, work_group_size);
         const unsigned int total_work_items = num_work_groups * work_group_size;
 
+        cl::Event init_event;
+        queue->enqueueFillBuffer(d_invLUvals, 0, 0, sizeof(double) * nnzbs * bs * bs, nullptr, &init_event);
+        init_event.wait();
+
         Dune::Timer t_isai_L;
         cl::Event event = (*isai_L_k)(cl::EnqueueArgs(*queue, cl::NDRange(total_work_items), cl::NDRange(work_group_size)),
-                                      d_mapping, d_colPtr, d_rowIndex, d_diagIndex, d_LUvals, d_invLUvals, Nb+1);
+                                      d_mapping, d_colPtr, d_rowIndex, d_diagIndex, d_LUvals, d_invLUvals, Nb);
 
         if(verbosity >= 4){
             event.wait();
@@ -77,7 +81,7 @@ namespace bda{
 
         Dune::Timer t_isai_U;
         cl::Event event = (*isai_U_k)(cl::EnqueueArgs(*queue, cl::NDRange(total_work_items), cl::NDRange(work_group_size)),
-                                      d_mapping, d_colPtr, d_rowIndex, d_diagIndex, d_LUvals, d_invLUvals, Nb+1);
+                                      d_mapping, d_colPtr, d_rowIndex, d_diagIndex, d_LUvals, d_invLUvals, Nb);
 
         if(verbosity >= 4){
             event.wait();
@@ -158,15 +162,14 @@ namespace bda{
                 d_mapping = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(int) * nnzbs);
                 d_invL_x = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * Nb * bs);
 
-                Dune::Timer t_copy_data;
-                events.resize(2);
-                err = queue->enqueueWriteBuffer(d_mapping, CL_TRUE, 0, sizeof(int) * mapping.size(), mapping.data(), nullptr, &events[0]);
-                err |= queue->enqueueFillBuffer(d_invLUvals, 0, 0, sizeof(double) * Nb * bs, nullptr, &events[1]);
-                cl::WaitForEvents(events);
+                Dune::Timer t_copy_mapping;
+                cl::Event event;
+                err = queue->enqueueWriteBuffer(d_mapping, CL_TRUE, 0, sizeof(int) * mapping.size(), mapping.data(), nullptr, &event);
+                event.wait();;
 
                 if(verbosity >= 4){
                     std::ostringstream out;
-                    out << "IncompleteSAI copy data to GPU time: " << t_copy_data.stop() << " s";
+                    out << "IncompleteSAI copy mapping to GPU time: " << t_copy_mapping.stop() << " s";
                     OpmLog::info(out.str());
                 }
 
