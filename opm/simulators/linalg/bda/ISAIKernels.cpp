@@ -72,18 +72,18 @@ namespace bda{
 
                     for(unsigned int sweep = 1; sweep < nx; sweep++){
                         while(xid < nx){
-                            unsigned int xpos = mapping[rowIndex[frow + xid]];
+                            unsigned int xpos = mapping[frow + xid];
 
                             if(sweep == 1){
                                 block_sub(invLU + xpos * bs * bs, LU + xpos * bs * bs);
                             }
                             else if(xid >= sweep){
-                                unsigned int dxpos = mapping[rowIndex[frow + sweep - 1]]; // dxpos -> determined (already calculated) x position
-                                unsigned int ptr = diagIndex[rowIndex[frow + sweep - 1]];
+                                unsigned int dxpos = mapping[frow + sweep - 1]; // dxpos -> determined (already calculated) x position
+                                unsigned int ptr = diagIndex[rowIndex[frow + sweep - 1]] + 1;
 
                                 for(; ptr < colPtr[rowIndex[frow + sweep]]; ptr++){
                                     if(rowIndex[ptr] == rowIndex[frow + xid]){
-                                        block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[rowIndex[ptr]] * bs * bs);
+                                        block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[ptr] * bs * bs);
                                     }
                                 }
                             }
@@ -187,25 +187,25 @@ namespace bda{
 
                     for(unsigned int sweep = 0; sweep <= nx; sweep++){
                         while(xid < nx){
-                            unsigned int xpos = mapping[rowIndex[lrow - xid - 1]];
+                            unsigned int xpos = mapping[lrow - xid - 1];
 
                             if(sweep == 0 && xid == 0){
                                 block_add(invLU + xpos * bs * bs, LU + xpos * bs * bs);
                             }
                             else if(sweep > 0 && sweep < nx){
-                                unsigned int dxpos = mapping[rowIndex[lrow - sweep]];
+                                unsigned int dxpos = mapping[lrow - sweep];
                                 unsigned int ptr = colPtr[rowIndex[lrow - sweep + 1]];
 
                                 for(; ptr < diagIndex[rowIndex[lrow - sweep + 1]]; ptr++){
                                     if(rowIndex[ptr] == rowIndex[lrow - xid - 1]){
-                                        block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[rowIndex[ptr]] * bs * bs);
+                                        block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[ptr] * bs * bs);
                                     }
                                 }
                             }
                             else if(xid > 0){ // sweep == nx
                                 // add one more sweep that will multiply the X's by inverses of the diagonals!
                                 unsigned int diagptr = diagIndex[rowIndex[lrow - xid]];
-                                unsigned int diagpos = mapping[rowIndex[diagptr]];
+                                unsigned int diagpos = mapping[diagptr];
 
                                 block_local_copy(x_lcopy, invLU + xpos * bs * bs);
                                 block_mult(invLU + xpos * bs * bs, x_lcopy, LU + diagpos * bs * bs);
