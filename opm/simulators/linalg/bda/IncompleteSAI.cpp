@@ -58,9 +58,6 @@ namespace bda{
         const unsigned int num_work_groups = ceilDivision(Nb, work_group_size);
         const unsigned int total_work_items = num_work_groups * work_group_size;
 
-        cl::Event init_event;
-        queue->enqueueFillBuffer(d_invLUvals, 0, 0, sizeof(double) * nnzbs * bs * bs, nullptr, &init_event);
-        init_event.wait();
 
         Dune::Timer t_isai_L;
         cl::Event event = (*isai_L_k)(cl::EnqueueArgs(*queue, cl::NDRange(total_work_items), cl::NDRange(work_group_size)),
@@ -177,6 +174,11 @@ namespace bda{
                     OPM_THROW(std::logic_error, "IncompleteSAI: OpenCL error writting data");
                 }
             });
+
+            std::vector<cl::Event> init_events(2);
+            queue->enqueueFillBuffer(d_invLUvals, 0, 0, sizeof(double) * nnzbs * bs * bs, nullptr, &init_events[0]);
+            queue->enqueueFillBuffer(d_invL_x, 0, 0, sizeof(double) * Nb * bs, nullptr, &init_events[1]);
+            cl::WaitForEvents(init_events);
 
             isai_L_w(d_colPtr, d_rowIndex, d_diagIndex, d_LUvals);
             isai_U_w(d_colPtr, d_rowIndex, d_diagIndex, d_LUvals);
