@@ -124,66 +124,54 @@ namespace bda{
         }
     }
 
-    void IncompleteSAI::apply(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& d_LUvals, cl::Buffer& x, cl::Buffer& y){
+    void IncompleteSAI::init(){
         try{
-            std::call_once(initialize_flag, [&](){
-                std::string isai_L_s = get_isai_L_string();
-                std::string isai_U_s = get_isai_U_string();
-                std::string apply_invL_s = get_apply_invL_string();
-                std::string apply_invU_s = get_apply_invU_string();
+            std::string isai_L_s = get_isai_L_string();
+            std::string isai_U_s = get_isai_U_string();
+            std::string apply_invL_s = get_apply_invL_string();
+            std::string apply_invU_s = get_apply_invU_string();
 
-                cl::Program::Sources sources;
-                sources.emplace_back(std::make_pair(isai_L_s.c_str(), isai_L_s.size()));
-                sources.emplace_back(std::make_pair(isai_U_s.c_str(), isai_U_s.size()));
-                sources.emplace_back(std::make_pair(apply_invL_s.c_str(), apply_invL_s.size()));
-                sources.emplace_back(std::make_pair(apply_invU_s.c_str(), apply_invU_s.size()));
+            cl::Program::Sources sources;
+            sources.emplace_back(std::make_pair(isai_L_s.c_str(), isai_L_s.size()));
+            sources.emplace_back(std::make_pair(isai_U_s.c_str(), isai_U_s.size()));
+            sources.emplace_back(std::make_pair(apply_invL_s.c_str(), apply_invL_s.size()));
+            sources.emplace_back(std::make_pair(apply_invU_s.c_str(), apply_invU_s.size()));
 
-                program = cl::Program(*context, sources, &err);
-                if(err != CL_SUCCESS){
-                    OPM_THROW(std::logic_error, "IncompleteSAI: OpenCL could not create program");
-                }
+            program = cl::Program(*context, sources, &err);
+            if(err != CL_SUCCESS){
+                OPM_THROW(std::logic_error, "IncompleteSAI: OpenCL could not create program");
+            }
 
-                devices = context->getInfo<CL_CONTEXT_DEVICES>();
-                program.build(devices);
+            devices = context->getInfo<CL_CONTEXT_DEVICES>();
+            program.build(devices);
 
-                isai_L_k.reset(new isai_L_kernel_type(cl::Kernel(program, "isai_L", &err)));
-                isai_U_k.reset(new isai_U_kernel_type(cl::Kernel(program, "isai_U", &err)));
-                apply_invL_k.reset(new apply_invL_kernel_type(cl::Kernel(program, "apply_invL", &err)));
-                apply_invU_k.reset(new apply_invU_kernel_type(cl::Kernel(program, "apply_invU", &err)));
+            isai_L_k.reset(new isai_L_kernel_type(cl::Kernel(program, "isai_L", &err)));
+            isai_U_k.reset(new isai_U_kernel_type(cl::Kernel(program, "isai_U", &err)));
+            apply_invL_k.reset(new apply_invL_kernel_type(cl::Kernel(program, "apply_invL", &err)));
+            apply_invU_k.reset(new apply_invU_kernel_type(cl::Kernel(program, "apply_invU", &err)));
 
-                if(err != CL_SUCCESS){
-                    OPM_THROW(std::logic_error, "IncompleteSAI: OpenCL could not create kernels");
-                }
+            if(err != CL_SUCCESS){
+                OPM_THROW(std::logic_error, "IncompleteSAI: OpenCL could not create kernels");
+            }
 
-                d_invLUvals = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * nnzbs * bs * bs);
-                d_mapping = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(int) * nnzbs);
-                d_invL_x = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * Nb * bs);
+            d_invLUvals = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * nnzbs * bs * bs);
+            d_mapping = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(int) * nnzbs);
+            d_invL_x = cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(double) * Nb * bs);
 
-                Dune::Timer t_copy_mapping;
-                cl::Event event;
-                err = queue->enqueueWriteBuffer(d_mapping, CL_TRUE, 0, sizeof(int) * mapping.size(), mapping.data(), nullptr, &event);
-                event.wait();;
+            Dune::Timer t_copy_mapping;
+            cl::Event event;
+            err = queue->enqueueWriteBuffer(d_mapping, CL_TRUE, 0, sizeof(int) * mapping.size(), mapping.data(), nullptr, &event);
+            event.wait();;
 
-                if(verbosity >= 4){
-                    std::ostringstream out;
-                    out << "IncompleteSAI copy mapping to GPU time: " << t_copy_mapping.stop() << " s";
-                    OpmLog::info(out.str());
-                }
+            if(verbosity >= 4){
+                std::ostringstream out;
+                out << "IncompleteSAI copy mapping to GPU time: " << t_copy_mapping.stop() << " s";
+                OpmLog::info(out.str());
+            }
 
-                if(err != CL_SUCCESS){
-                    OPM_THROW(std::logic_error, "IncompleteSAI: OpenCL error writting data");
-                }
-            });
-
-            std::vector<cl::Event> init_events(2);
-            queue->enqueueFillBuffer(d_invLUvals, 0, 0, sizeof(double) * nnzbs * bs * bs, nullptr, &init_events[0]);
-            queue->enqueueFillBuffer(d_invL_x, 0, 0, sizeof(double) * Nb * bs, nullptr, &init_events[1]);
-            cl::WaitForEvents(init_events);
-
-            isai_L_w(d_colPtr, d_rowIndex, d_diagIndex, d_LUvals);
-            isai_U_w(d_colPtr, d_rowIndex, d_diagIndex, d_LUvals);
-            apply_invL_w(d_colPtr, d_rowIndex, d_diagIndex, x);
-            apply_invU_w(d_colPtr, d_rowIndex, d_diagIndex, y);
+            if(err != CL_SUCCESS){
+                OPM_THROW(std::logic_error, "IncompleteSAI: OpenCL error writting data");
+            }
         }
 
         catch(const cl::Error& error){
@@ -208,5 +196,27 @@ namespace bda{
         catch(const std::logic_error& error){
             throw error;
         }
+    }
+
+    void IncompleteSAI::create_preconditioner(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& d_LUvals){
+        std::call_once(initialize_flag, [&](){
+            init();
+        });
+
+        cl::Event init_event;
+        queue->enqueueFillBuffer(d_invLUvals, 0, 0, sizeof(double) * nnzbs * bs * bs, nullptr, &init_event);
+        init_event.wait();
+
+        isai_L_w(d_colPtr, d_rowIndex, d_diagIndex, d_LUvals);
+        isai_U_w(d_colPtr, d_rowIndex, d_diagIndex, d_LUvals);
+    }
+
+    void IncompleteSAI::apply(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& x, cl::Buffer& y){
+        cl::Event init_event;
+        queue->enqueueFillBuffer(d_invL_x, 0, 0, sizeof(double) * Nb * bs, nullptr, &init_event);
+        init_event.wait();
+
+        apply_invL_w(d_colPtr, d_rowIndex, d_diagIndex, x);
+        apply_invU_w(d_colPtr, d_rowIndex, d_diagIndex, y);
     }
 }

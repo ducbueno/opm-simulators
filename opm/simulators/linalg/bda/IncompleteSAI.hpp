@@ -29,13 +29,15 @@ namespace bda{
         void isai_U_w(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& d_LUvals);
         void apply_invL_w(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& x);
         void apply_invU_w(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& y);
+        void init();
 
     public:
         void setParams(int Nb, int bs, int nnzbs, int verbosity);
         void setMapping(int *CSRColIndices, int *CSRRowPointers);
         void setOpenCLContext(cl::Context *context);
         void setOpenCLQueue(cl::CommandQueue *queue);
-        void apply(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& d_LUvals, cl::Buffer& x, cl::Buffer& y);
+        void create_preconditioner(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& d_LUvals);
+        void apply(cl::Buffer& d_colPtr, cl::Buffer& d_rowIndex, cl::Buffer& d_diagIndex, cl::Buffer& x, cl::Buffer& y);
     };
 }
 
