@@ -68,16 +68,15 @@ namespace bda{
                 const unsigned int nx = lrow - frow;
 
                 if(lane < num_active_threads){
-                    unsigned int xid = 1 + lane / bs / bs;
-
                     for(unsigned int sweep = 1; sweep < nx; sweep++){
-                        while(xid < nx){
+                        for(unsigned int xid = 1 + lane / bs / bs; xid < nx; xid += num_blocks_per_warp){
                             unsigned int xpos = mapping[frow + xid];
 
                             if(sweep == 1){
                                 block_sub(invLU + xpos * bs * bs, LU + xpos * bs * bs);
                             }
-                            else if(xid >= sweep){
+
+                            if(sweep > 1 && xid >= sweep){
                                 unsigned int dxpos = mapping[frow + sweep - 1]; // dxpos -> determined (already calculated) x position
                                 unsigned int ptr = diagIndex[rowIndex[frow + sweep - 1]] + 1;
 
@@ -87,8 +86,6 @@ namespace bda{
                                     }
                                 }
                             }
-
-                            xid += num_blocks_per_warp;
                         }
                     }
                 }
@@ -183,10 +180,8 @@ namespace bda{
                 const unsigned int nx = lrow - frow;
 
                 if(lane < num_active_threads){
-                    unsigned int xid = lane / bs / bs;
-
                     for(unsigned int sweep = 0; sweep <= nx; sweep++){
-                        while(xid < nx){
+                        for(unsigned int xid = lane / bs / bs; xid < nx; xid += num_blocks_per_warp){
                             unsigned int xpos = mapping[lrow - xid - 1];
 
                             if(sweep == 0 && xid == 0){
@@ -210,8 +205,6 @@ namespace bda{
                                 block_local_copy(x_lcopy, invLU + xpos * bs * bs);
                                 block_mult(invLU + xpos * bs * bs, x_lcopy, LU + diagpos * bs * bs);
                             }
-
-                            xid += num_blocks_per_warp;
                         }
                     }
                 }
