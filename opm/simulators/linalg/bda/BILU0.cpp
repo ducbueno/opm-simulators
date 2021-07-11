@@ -52,7 +52,6 @@ BILU0<block_size>::~BILU0()
     {
 #if ISAI
         isai.setParams(mat->Nb, block_size, mat->nnzbs, verbosity);
-        isai.setMapping(mat->colIndices, mat->rowPointers);
 #endif
 
         const unsigned int bs = block_size;
@@ -600,6 +599,7 @@ BILU0<block_size>::~BILU0()
 #endif // CHOW_PATEL
 
 #if ISAI
+        isai.setMapping(LUmat->colIndices, LUmat->rowPointers);
         isai.create_preconditioner(s.LUrows, s.LUcols, s.diagIndex, s.LUvals);
 #endif
 
