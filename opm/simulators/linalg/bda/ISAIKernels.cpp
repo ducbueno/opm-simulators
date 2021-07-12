@@ -63,26 +63,25 @@ namespace bda{
             unsigned int tcol = idx / warpsize;
 
             while(tcol < Nb - 1){
-                const unsigned int frow = diagIndex[tcol];
+                const unsigned int frow = diagIndex[tcol] + 1;
                 const unsigned int lrow = colPtr[tcol + 1];
                 const unsigned int nx = lrow - frow;
 
                 if(lane < num_active_threads){
-                    for(unsigned int sweep = 1; sweep < nx; sweep++){
-                        for(unsigned int xid = 1 + lane / bs / bs; xid < nx; xid += num_blocks_per_warp){
+                    for(unsigned int sweep = 0; sweep < nx; sweep++){
+                        for(unsigned int xid = sweep + lane / bs / bs; xid < nx; xid += num_blocks_per_warp){
                             unsigned int xpos = mapping[frow + xid];
 
-                            if(sweep == 1){
+                            if(sweep == 0){
                                 block_sub(invLU + xpos * bs * bs, LU + xpos * bs * bs);
                             }
-
-                            if(sweep > 1 && xid >= sweep){
+                            else{
                                 unsigned int dxpos = mapping[frow + sweep - 1]; // dxpos -> determined (already calculated) x position
                                 unsigned int ptr = diagIndex[rowIndex[frow + sweep - 1]] + 1;
 
                                 for(; ptr < colPtr[rowIndex[frow + sweep]]; ptr++){
                                     if(rowIndex[ptr] == rowIndex[frow + xid]){
-                                        block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[ptr] * bs * bs);
+                                        block_mult_sub(invLU + xpos * bs * bs, LU + mapping[ptr] * bs * bs, invLU + dxpos * bs * bs);
                                     }
                                 }
                             }
@@ -130,7 +129,7 @@ namespace bda{
             }
         }
 
-        __kernel void block_mult(__global double *a, __local double *b, __global double *c)
+        __kernel void block_mult(__global double *a, __global double *b, __local double *c)
         {
             const unsigned int bs = 3;
             const unsigned int warpsize = 32;
@@ -176,34 +175,34 @@ namespace bda{
 
             while(tcol < Nb){
                 const unsigned int frow = colPtr[tcol];
-                const unsigned int lrow = diagIndex[tcol] + 1;
-                const unsigned int nx = lrow - frow;
+                const unsigned int lrow = diagIndex[tcol];
+                const unsigned int nx = lrow - frow + 1;
 
                 if(lane < num_active_threads){
                     for(unsigned int sweep = 0; sweep <= nx; sweep++){
                         for(unsigned int xid = lane / bs / bs; xid < nx; xid += num_blocks_per_warp){
-                            unsigned int xpos = mapping[lrow - xid - 1];
+                            unsigned int xpos = mapping[lrow - xid];
 
                             if(sweep == 0 && xid == 0){
                                 block_add(invLU + xpos * bs * bs, LU + xpos * bs * bs);
                             }
                             else if(sweep > 0 && sweep < nx){
-                                unsigned int dxpos = mapping[lrow - sweep];
+                                unsigned int dxpos = mapping[lrow - sweep + 1];
                                 unsigned int ptr = colPtr[rowIndex[lrow - sweep + 1]];
 
                                 for(; ptr < diagIndex[rowIndex[lrow - sweep + 1]]; ptr++){
-                                    if(rowIndex[ptr] == rowIndex[lrow - xid - 1]){
-                                        block_mult_sub(invLU + xpos * bs * bs, invLU + dxpos * bs * bs, LU + mapping[ptr] * bs * bs);
+                                    if(rowIndex[ptr] == rowIndex[lrow - xid]){
+                                        block_mult_sub(invLU + xpos * bs * bs, LU + mapping[ptr] * bs * bs, invLU + dxpos * bs * bs);
                                     }
                                 }
                             }
-                            else if(xid > 0){ // sweep == nx
+                            else if(sweep == nx && xid > 0){ // sweep == nx
                                 // add one more sweep that will multiply the X's by inverses of the diagonals!
                                 unsigned int diagptr = diagIndex[rowIndex[lrow - xid]];
                                 unsigned int diagpos = mapping[diagptr];
 
                                 block_local_copy(x_lcopy, invLU + xpos * bs * bs);
-                                block_mult(invLU + xpos * bs * bs, x_lcopy, LU + diagpos * bs * bs);
+                                block_mult(invLU + xpos * bs * bs, LU + diagpos * bs * bs, x_lcopy);
                             }
                         }
                     }
